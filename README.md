@@ -38,21 +38,34 @@ ollama pull deepseek-r1
 
 ## Running the Evaluation
 
-1. Run the evaluation script:
+There are two evaluation scripts available:
+
+### 1. Standard Evaluation
 ```bash
 python3 evaluate_deepseek.py
 ```
+This script runs the evaluation and shows results after each task is complete.
 
-By default, the script evaluates the first 5 tasks. You can modify this by changing `num_tasks` in `main()`.
+### 2. Streaming Evaluation (Recommended)
+```bash
+python3 evaluate_deepseek_stream.py
+```
+This version shows the model's reasoning process in real-time, which is helpful to:
+- Monitor the model's thought process
+- Verify the model is actively working
+- Understand how it approaches each task
+- Debug any potential issues
 
-2. Results will be saved to `evaluation_results.json`, containing:
-- Overall accuracy
-- Per-task performance
-- Detailed model outputs and expected outputs
+Both scripts will:
+- Evaluate the first 5 tasks by default
+- Save results to `evaluation_results.json`
+- Save intermediate results to `evaluation_results_partial.json`
+- Show accuracy metrics at the end
 
 ## Project Structure
 
-- `evaluate_deepseek.py`: Main evaluation script
+- `evaluate_deepseek.py`: Standard evaluation script
+- `evaluate_deepseek_stream.py`: Evaluation script with real-time reasoning output
 - `requirements.txt`: Python dependencies
 - `data/`: Directory containing ARC tasks (from the original ARC repository)
   - `training/`: Training tasks
