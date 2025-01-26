@@ -1,66 +1,107 @@
-# Abstraction and Reasoning Corpus for Artificial General Intelligence (ARC-AGI)
+# DeepSeek R1 ARC-AGI Evaluation
 
-This repository contains the ARC-AGI task data, as well as a browser-based interface for humans to try their hand at solving the tasks manually.
+This repository contains code to evaluate DeepSeek R1's performance on the Abstraction and Reasoning Corpus (ARC) challenge. The evaluation is performed using Ollama for local model inference.
 
-*"ARC can be seen as a general artificial intelligence benchmark, as a program synthesis benchmark, or as a psychometric intelligence test. It is targeted at both humans and artificially intelligent systems that aim at emulating a human-like form of general fluid intelligence."*
+## Overview
 
-A complete description of the dataset, its goals, and its underlying logic, can be found in: [On the Measure of Intelligence](https://arxiv.org/abs/1911.01547).
+The Abstraction and Reasoning Corpus (ARC) is a benchmark designed to measure general fluid intelligence in AI systems. This project provides tools to:
+- Load and process ARC tasks
+- Present them to a locally running DeepSeek R1 model via Ollama
+- Evaluate the model's responses
+- Generate detailed performance metrics
 
-As a reminder, a test-taker is said to solve a task when, upon seeing the task for the first time, they are able to produce the correct output grid for *all* test inputs in the task (this includes picking the dimensions of the output grid). For each test input, the test-taker is allowed 3 trials (this holds for all test-takers, either humans or AI).
+## Prerequisites
 
+- Python 3.8 or higher
+- [Ollama](https://ollama.ai) installed locally
+- DeepSeek R1 model pulled in Ollama
 
-## Task file format
+## Setup
 
-The `data` directory contains two subdirectories:
+1. Clone the repository:
+```bash
+git clone https://github.com/raztronaut/deepseek-r1-arc-agi-eval.git
+cd deepseek-r1-arc-agi-eval
+```
 
-- `data/training`: contains the task files for training (400 tasks). Use these to prototype your algorithm or to train your algorithm to acquire ARC-relevant cognitive priors.
-- `data/evaluation`: contains the task files for evaluation (400 tasks). Use these to evaluate your final algorithm. To ensure fair evaluation results, do not leak information from the evaluation set into your algorithm (e.g. by looking at the evaluation tasks yourself during development, or by repeatedly modifying an algorithm while using its evaluation score as feedback).
+2. Create a virtual environment and install dependencies:
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-The tasks are stored in JSON format. Each task JSON file contains a dictionary with two fields:
+3. Ensure you have the DeepSeek R1 model in Ollama:
+```bash
+ollama pull deepseek-r1
+```
 
-- `"train"`: demonstration input/output pairs. It is a list of "pairs" (typically 3 pairs).
-- `"test"`: test input/output pairs. It is a list of "pairs" (typically 1 pair).
+## Running the Evaluation
 
-A "pair" is a dictionary with two fields:
+1. Run the evaluation script:
+```bash
+python3 evaluate_deepseek.py
+```
 
-- `"input"`: the input "grid" for the pair.
-- `"output"`: the output "grid" for the pair.
+By default, the script evaluates the first 5 tasks. You can modify this by changing `num_tasks` in `main()`.
 
-A "grid" is a rectangular matrix (list of lists) of integers between 0 and 9 (inclusive). The smallest possible grid size is 1x1 and the largest is 30x30.
+2. Results will be saved to `evaluation_results.json`, containing:
+- Overall accuracy
+- Per-task performance
+- Detailed model outputs and expected outputs
 
-When looking at a task, a test-taker has access to inputs & outputs of the demonstration pairs, plus the input(s) of the test pair(s). The goal is to construct the output grid(s) corresponding to the test input grid(s), using 3 trials for each test input. "Constructing the output grid" involves picking the height and width of the output grid, then filling each cell in the grid with a symbol (integer between 0 and 9, which are visualized as colors). Only *exact* solutions (all cells match the expected answer) can be said to be correct.
+## Project Structure
 
+- `evaluate_deepseek.py`: Main evaluation script
+- `requirements.txt`: Python dependencies
+- `data/`: Directory containing ARC tasks (from the original ARC repository)
+  - `training/`: Training tasks
+  - `evaluation/`: Evaluation tasks
 
-## Usage of the testing interface
+## Implementation Details
 
-The testing interface is located at `apps/testing_interface.html`. Open it in a web browser (Chrome recommended). It will prompt you to select a task JSON file.
+The evaluation process:
+1. Loads ARC tasks from JSON files
+2. For each task:
+   - Formats training examples and test input into a prompt
+   - Sends the prompt to DeepSeek R1 via Ollama
+   - Parses the model's response into a grid format
+   - Compares with the expected output
+   - Records results and metrics
 
-After loading a task, you will enter the test space, which looks like this:
+The prompt engineering is designed to:
+- Clearly present the pattern recognition task
+- Provide structured examples
+- Request specific output format
+- Enforce constraints (numbers 0-9, grid dimensions)
 
-![test space](https://arc-benchmark.s3.amazonaws.com/figs/arc_test_space.png)
+## Results Format
 
-On the left, you will see the input/output pairs demonstrating the nature of the task. In the middle, you will see the current test input grid. On the right, you will see the controls you can use to construct the corresponding output grid.
+The evaluation generates a JSON file with:
+```json
+{
+    "correct": <number_of_correct_solutions>,
+    "total": <total_number_of_test_cases>,
+    "tasks": [
+        {
+            "task_id": <task_identifier>,
+            "correct": <number_correct_for_this_task>,
+            "total": <number_of_test_cases_for_this_task>,
+            "details": [
+                {
+                    "test_case": <test_case_number>,
+                    "correct": <boolean>,
+                    "model_output": <grid>,
+                    "expected_output": <grid>
+                }
+            ]
+        }
+    ]
+}
+```
 
-You have access to the following tools:
+## Acknowledgments
 
-### Grid controls
-
-- Resize: input a grid size (e.g. "10x20" or "4x4") and click "Resize". This preserves existing grid content (in the top left corner).
-- Copy from input: copy the input grid to the output grid. This is useful for tasks where the output consists of some modification of the input.
-- Reset grid: fill the grid with 0s.
-
-### Symbol controls
-
-- Edit: select a color (symbol) from the color picking bar, then click on a cell to set its color.
-- Select: click and drag on either the output grid or the input grid to select cells.
-    - After selecting cells on the output grid, you can select a color from the color picking to set the color of the selected cells. This is useful to draw solid rectangles or lines.
-    - After selecting cells on either the input grid or the output grid, you can press C to copy their content. After copying, you can select a cell on the output grid and press "V" to paste the copied content. You should select the cell in the top left corner of the zone you want to paste into.
-- Floodfill: click on a cell from the output grid to color all connected cells to the selected color. "Connected cells" are contiguous cells with the same color.
-
-### Answer validation
-
-When your output grid is ready, click the green "Submit!" button to check your answer. We do not enforce the 3-trials rule.
-
-After you've obtained the correct answer for the current test input grid, you can switch to the next test input grid for the task using the "Next test input" button (if there is any available; most tasks only have one test input).
-
-When you're done with a task, use the "load task" button to open a new task.
+- Original ARC dataset: [Abstraction and Reasoning Corpus](https://github.com/fchollet/ARC)
+- DeepSeek R1 model
+- Ollama project
