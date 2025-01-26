@@ -1,13 +1,16 @@
 import json
 import os
+import asyncio
 from typing import List, Dict, Any
 from pathlib import Path
 import ollama
+import time
 
 class ARCEvaluator:
     def __init__(self):
         self.training_path = Path("data/training")
         self.evaluation_path = Path("data/evaluation")
+        self.timeout = 30  # timeout in seconds
         
     def load_task(self, task_path: Path) -> Dict[str, Any]:
         """Load a single ARC task from JSON file."""
@@ -80,6 +83,25 @@ class ARCEvaluator:
                 return False
         return True
     
+    async def call_model_with_timeout(self, prompt: str) -> str:
+        """Call the model with a timeout."""
+        try:
+            response = await asyncio.wait_for(
+                ollama.chat(
+                    model='deepseek-r1',
+                    messages=[{'role': 'user', 'content': prompt}],
+                    stream=False
+                ),
+                timeout=self.timeout
+            )
+            return response['message']['content']
+        except asyncio.TimeoutError:
+            print(f"Request timed out after {self.timeout} seconds")
+            return ""
+        except Exception as e:
+            print(f"Error calling model: {str(e)}")
+            return ""
+    
     async def run_evaluation(self, num_tasks: int = None):
         """Run evaluation on the test set."""
         results = {
@@ -93,6 +115,7 @@ class ARCEvaluator:
             eval_files = eval_files[:num_tasks]
         
         for task_path in eval_files:
+            start_time = time.time()
             task = self.load_task(task_path)
             task_result = {
                 'task_id': task_path.stem,
@@ -101,26 +124,25 @@ class ARCEvaluator:
                 'details': []
             }
             
+            print(f"\nStarting task {task_path.stem}...")
+            
             for test_idx, test_case in enumerate(task['test']):
                 prompt = self.create_prompt(task, test_case['input'])
+                print(f"Processing test case {test_idx + 1}...")
                 
-                print(f"\nProcessing task {task_path.stem}, test case {test_idx + 1}...")
+                # Call model with timeout
+                model_response = await self.call_model_with_timeout(prompt)
                 
-                # Call DeepSeek R1 through Ollama
-                response = await ollama.chat(
-                    model='deepseek-r1',
-                    messages=[{'role': 'user', 'content': prompt}],
-                    stream=False
-                )
+                if not model_response:
+                    print("Skipping this test case due to model error")
+                    continue
                 
-                model_response = response['message']['content']
                 parsed_output = self.parse_model_output(model_response)
-                
                 is_correct = self.evaluate_task(task, parsed_output, test_case['output'])
+                
                 if is_correct:
                     task_result['correct'] += 1
                 
-                # Store detailed results
                 detail = {
                     'test_case': test_idx + 1,
                     'correct': is_correct,
@@ -140,26 +162,39 @@ class ARCEvaluator:
             results['total'] += task_result['total']
             results['correct'] += task_result['correct']
             
-            # Print progress
+            elapsed_time = time.time() - start_time
             print(f"\nTask {task_path.stem} complete: {task_result['correct']}/{task_result['total']} correct")
+            print(f"Time taken: {elapsed_time:.2f} seconds")
+            
+            # Save intermediate results
+            with open('evaluation_results_partial.json', 'w') as f:
+                json.dump(results, f, indent=2)
         
         return results
 
 async def main():
     evaluator = ARCEvaluator()
     
-    # Run evaluation on first 5 tasks for testing
-    results = await evaluator.run_evaluation(num_tasks=5)
+    print("Starting evaluation...")
+    print("Will evaluate first 5 tasks with 30-second timeout per model call")
+    print("Results will be saved after each task")
     
-    # Print results
-    print("\nFinal Evaluation Results:")
-    print(f"Total Correct: {results['correct']}/{results['total']}")
-    print(f"Accuracy: {results['correct']/results['total']*100:.2f}%")
-    
-    # Save results
-    with open('evaluation_results.json', 'w') as f:
-        json.dump(results, f, indent=2)
+    try:
+        results = await evaluator.run_evaluation(num_tasks=5)
+        
+        print("\nFinal Evaluation Results:")
+        print(f"Total Correct: {results['correct']}/{results['total']}")
+        print(f"Accuracy: {results['correct']/results['total']*100:.2f}%")
+        
+        with open('evaluation_results.json', 'w') as f:
+            json.dump(results, f, indent=2)
+            
+    except KeyboardInterrupt:
+        print("\nEvaluation interrupted by user")
+        print("Partial results have been saved to evaluation_results_partial.json")
+    except Exception as e:
+        print(f"\nError during evaluation: {str(e)}")
+        print("Check evaluation_results_partial.json for any saved results")
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main()) 
