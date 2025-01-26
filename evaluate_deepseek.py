@@ -1,6 +1,5 @@
 import json
 import os
-import asyncio
 from typing import List, Dict, Any
 from pathlib import Path
 import ollama
@@ -83,26 +82,19 @@ class ARCEvaluator:
                 return False
         return True
     
-    async def call_model_with_timeout(self, prompt: str) -> str:
-        """Call the model with a timeout."""
+    def call_model(self, prompt: str) -> str:
+        """Call the model with error handling."""
         try:
-            response = await asyncio.wait_for(
-                ollama.chat(
-                    model='deepseek-r1',
-                    messages=[{'role': 'user', 'content': prompt}],
-                    stream=False
-                ),
-                timeout=self.timeout
+            response = ollama.chat(
+                model='deepseek-r1',
+                messages=[{'role': 'user', 'content': prompt}]
             )
             return response['message']['content']
-        except asyncio.TimeoutError:
-            print(f"Request timed out after {self.timeout} seconds")
-            return ""
         except Exception as e:
             print(f"Error calling model: {str(e)}")
             return ""
     
-    async def run_evaluation(self, num_tasks: int = None):
+    def run_evaluation(self, num_tasks: int = None):
         """Run evaluation on the test set."""
         results = {
             'correct': 0,
@@ -130,8 +122,8 @@ class ARCEvaluator:
                 prompt = self.create_prompt(task, test_case['input'])
                 print(f"Processing test case {test_idx + 1}...")
                 
-                # Call model with timeout
-                model_response = await self.call_model_with_timeout(prompt)
+                # Call model
+                model_response = self.call_model(prompt)
                 
                 if not model_response:
                     print("Skipping this test case due to model error")
@@ -172,15 +164,15 @@ class ARCEvaluator:
         
         return results
 
-async def main():
+def main():
     evaluator = ARCEvaluator()
     
     print("Starting evaluation...")
-    print("Will evaluate first 5 tasks with 30-second timeout per model call")
+    print("Will evaluate first 5 tasks")
     print("Results will be saved after each task")
     
     try:
-        results = await evaluator.run_evaluation(num_tasks=5)
+        results = evaluator.run_evaluation(num_tasks=5)
         
         print("\nFinal Evaluation Results:")
         print(f"Total Correct: {results['correct']}/{results['total']}")
@@ -197,4 +189,4 @@ async def main():
         print("Check evaluation_results_partial.json for any saved results")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    main() 
